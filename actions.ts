@@ -17,6 +17,16 @@ export type Product = {
   created_at: string;
 };
 
+export type ParsedProductInput = {
+  title: string;
+  description: string;
+  v_price: number;
+  i_price: number;
+  sku: string;
+  category: string;
+  sub_category: string;
+};
+
 export async function addProduct(rawData: string) {
   try {
     if (!rawData || rawData.trim() === '') {
@@ -24,7 +34,7 @@ export async function addProduct(rawData: string) {
     }
 
     // Parse the pasted raw content
-    const parsedProduct = parseWhatsAppMessage(rawData);
+    const parsedProduct = parseWhatsAppMessage(rawData) as ParsedProductInput;
 
     // Insert into Supabase
     const { data, error } = await supabase
