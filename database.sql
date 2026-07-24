@@ -23,7 +23,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- 3. Create products table
+-- 3. Create products table (extended for bulk upload features)
 CREATE TABLE IF NOT EXISTS products (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     serial_number INT NOT NULL,
@@ -34,6 +34,10 @@ CREATE TABLE IF NOT EXISTS products (
     sku VARCHAR(100) NOT NULL UNIQUE,
     category VARCHAR(100) NOT NULL,
     sub_category VARCHAR(100) NOT NULL,
+    image_url TEXT,
+    hsn_code VARCHAR(50),
+    sku_prefix VARCHAR(50),
+    created_by VARCHAR(100) DEFAULT 'Operator',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -42,6 +46,13 @@ CREATE OR REPLACE FUNCTION set_product_serial_number()
 RETURNS TRIGGER AS $$
 BEGIN
     NEW.serial_number := get_next_serial(NEW.category);
+    
+    -- Dynamically generate the SKU using the SKU prefix, category short name, and serial number
+    -- Format: [PREFIX]-[CAT-SHORT]-[SERIAL]
+    IF NEW.sku IS NULL OR NEW.sku = '' THEN
+        NEW.sku := COALESCE(NEW.sku_prefix, 'SKU') || '-' || UPPER(SUBSTRING(NEW.category, 1, 3)) || '-' || LPAD(CAST(NEW.serial_number AS VARCHAR), 3, '0');
+    END IF;
+    
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -55,6 +66,20 @@ BEFORE INSERT ON products
 FOR EACH ROW
 EXECUTE FUNCTION set_product_serial_number();
 
--- 5. Add index optimization
+-- 5. Create audit logs table
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    record_id UUID,
+    user_name VARCHAR(100),
+    user_role VARCHAR(50),
+    action VARCHAR(100) NOT NULL, -- 'INSERT', 'UPDATE', 'DELETE', 'UNLOCK'
+    previous_value JSONB,
+    updated_value JSONB,
+    ip_address VARCHAR(45),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 6. Add index optimization
 CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku);
 CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_record_id ON audit_logs(record_id);
